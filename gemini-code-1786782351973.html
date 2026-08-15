@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ROEN VOCAL CARE - AI 개인 레슨 비서</title>
+    
+    <!-- Firebase SDK (v9 호환 모드) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --primary: #5B4DFF;
+            --primary-hover: #4839EB;
+            --primary-light: #EEECFF;
+            --bg-main: #F4F5F7;
+            --surface: #FFFFFF;
+            --text-main: #1F2937;
+            --text-muted: #6B7280;
+            --border: #E5E7EB;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+            --success: #10B981;
+            --ai-purple: #8B5CF6;
+            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --radius-md: 10px;
+            --radius-lg: 16px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg-main); color: var(--text-main); line-height: 1.5; display: flex; flex-direction: column; min-height: 100vh; }
+
+        header { background-color: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; box-shadow: var(--shadow-sm); }
+        .header-container { max-width: 1440px; margin: 0 auto; padding: 0.8rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+        .brand h1 { font-size: 1.15rem; font-weight: 800; color: var(--primary); letter-spacing: -0.5px; }
+        .brand p { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+
+        .header-status-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .teacher-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 800; background: var(--primary-light); color: var(--primary); padding: 5px 12px; border-radius: 20px; border: 1px solid #C7D2FE; cursor: pointer; }
+        .api-key-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.75rem; font-weight: 700; color: #4338CA; background: #EEF2FF; padding: 4px 10px; border-radius: 20px; border: 1px solid #C7D2FE; cursor: pointer; }
+
+        main { flex: 1; max-width: 1440px; width: 100%; margin: 0 auto; padding: 1rem; }
+
+        .tab-nav { display: flex; gap: 8px; margin-bottom: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+        .tab-btn { background: none; border: none; font-size: 0.95rem; font-weight: 800; padding: 8px 16px; border-radius: var(--radius-md); cursor: pointer; color: var(--text-muted); transition: 0.2s; }
+        .tab-btn.active { background-color: var(--surface); color: var(--primary); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+
+        .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem; }
+        .search-box { flex: 1; min-width: 220px; }
+        .search-input { width: 100%; padding: 0.625rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.875rem; outline: none; background-color: var(--surface); }
+
+        .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.625rem 1rem; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 600; cursor: pointer; border: none; transition: 0.2s; white-space: nowrap; gap: 4px; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-secondary { background-color: var(--surface); border: 1px solid var(--border); color: var(--text-main); }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-ai { background-color: var(--ai-purple); color: white; }
+        .btn-pdf { background-color: var(--success); color: white; }
+        .btn-share { background-color: #FEE500; color: #191919; font-weight: 700; }
+        .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 6px; font-weight: 600; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* 💡 1시간 고정 시간표 및 30분 반칸(Half-Slot) 그리드 */
+        .timetable-table { width: 100%; border-collapse: collapse; min-width: 950px; text-align: center; table-layout: fixed; }
+        .timetable-table th { background: #1E1B4B; color: white; padding: 0.65rem; font-size: 0.85rem; border: 1px solid #312E81; }
+        .timetable-table td { border: 1px solid var(--border); vertical-align: top; padding: 0; height: 96px; background: var(--surface); }
+        .timetable-table td.time-col { background: #F8FAFC; font-weight: 700; color: #475569; font-size: 0.8rem; width: 70px; vertical-align: middle; }
+
+        .hour-cell-container { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        .half-slot { flex: 1; min-height: 48px; padding: 2px 3px; display: flex; flex-direction: column; justify-content: center; position: relative; }
+        .half-slot.top { border-bottom: 1px dashed #E2E8F0; }
+        .full-slot { height: 100%; padding: 3px; display: flex; flex-direction: column; justify-content: center; }
+
+        .teacher-block { background-color: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 1.5rem; overflow: hidden; }
+        .teacher-header { background: linear-gradient(135deg, #1E1B4B 0%, #312E81 100%); color: white; padding: 0.8rem 1.25rem; display: flex; justify-content: space-between; align-items: center; }
+
+        .grid-student-card { background: var(--primary-light); border: 1px solid #C7D2FE; border-radius: 5px; padding: 4px 6px; text-align: left; font-size: 0.76rem; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; user-select: none; width: 100%; }
+        .grid-student-card.full-card { height: calc(100% - 2px); display: flex; flex-direction: column; justify-content: center; padding: 6px 8px; background: #EBE8FF; border-color: #818CF8; }
+        .grid-student-card:hover { transform: translateY(-1px); box-shadow: 0 3px 5px rgba(91, 77, 255, 0.15); border-color: var(--primary); }
+        .grid-student-card.temp-changed { border-color: #F59E0B; background: #FFFBEB; }
+        .grid-student-card.conflict { border-color: #EF4444 !important; background: #FEF2F2 !important; }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: center; }
+        .card-name { font-weight: 800; color: var(--text-main); font-size: 0.82rem; }
+        .card-tag { font-size: 0.62rem; font-weight: 800; padding: 1px 4px; border-radius: 3px; background: rgba(91, 77, 255, 0.12); color: var(--primary); }
+        .card-tag.mod { background: #FEF3C7; color: #B45309; }
+        .card-tag.conflict-tag { background: #EF4444; color: white; font-weight: 900; }
+        .card-duration-badge { font-size: 0.6rem; font-weight: 700; color: #4338CA; background: #EEF2FF; padding: 1px 3px; border-radius: 3px; margin-left: 2px; }
+
+        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table.list-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; min-width: 950px; }
+        table.list-table th { background-color: #F8FAFC; padding: 0.65rem 0.8rem; color: #475569; font-weight: 700; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        table.list-table td { padding: 0.65rem 0.8rem; border-bottom: 1px solid var(--border); color: var(--text-main); white-space: nowrap; }
+        table.list-table tr.clickable-row { cursor: pointer; transition: background 0.15s; }
+        table.list-table tr.clickable-row:hover { background-color: #EEECFF !important; }
+
+        .day-badge { font-weight: 800; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; display: inline-block; }
+        .day-badge.월 { background-color: #E0F2FE; color: #0369A1; border: 1px solid #BAE6FD; }
+        .day-badge.화 { background-color: #FFEDD5; color: #C2410C; border: 1px solid #FED7AA; }
+        .day-badge.수 { background-color: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0; }
+        .day-badge.목 { background-color: #F3E8FF; color: #6B21A8; border: 1px solid #E9D5FF; }
+        .day-badge.금 { background-color: #FEF9C3; color: #A16207; border: 1px solid #FEF08A; }
+        .day-badge.토 { background-color: #FFE4E6; color: #BE123C; border: 1px solid #FECDD3; }
+        .day-badge.기타 { background-color: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; }
+        .age-badge { font-size: 0.68rem; font-weight: 700; background: #E2E8F0; color: #334155; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+        .duration-chip { font-size: 0.68rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE; margin-left: 4px; }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s; backdrop-filter: blur(2px); }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal { background-color: var(--surface); border-radius: var(--radius-lg); width: 95%; max-width: 740px; box-shadow: var(--shadow-md); overflow: hidden; max-height: 94vh; display: flex; flex-direction: column; margin: auto; }
+        .modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 1.05rem; font-weight: 800; }
+        .modal-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); padding: 0 0.5rem; }
+        .modal-body { padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; -webkit-overflow-scrolling: touch; }
+        .modal-footer { padding: 0.8rem 1.25rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.5rem; background-color: var(--bg-main); }
+
+        .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+        .form-group label { font-size: 0.8rem; font-weight: 600; }
+        .form-control { padding: 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.85rem; outline: none; }
+
+        .paste-section { border-top: 1px solid var(--border); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+        .paste-textarea { width: 100%; height: 120px; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.8rem; outline: none; resize: vertical; line-height: 1.4; }
+        .chapter-box { background: linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 100%); border: 1px solid #CBD5E1; border-radius: var(--radius-md); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; box-shadow: var(--shadow-sm); }
+
+        .step-progress-box { display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border: 1px solid #C7D2FE; border-radius: var(--radius-md); padding: 1rem; margin: 0.5rem 0; }
+        .step-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-muted); }
+        .step-row.active { color: var(--primary); font-weight: 700; }
+        .step-spinner { width: 14px; height: 14px; border: 2px solid #C7D2FE; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .transcript-viewer-container { border: 1px solid var(--border); border-radius: var(--radius-md); background: #F8FAFC; margin-top: 0.75rem; overflow: hidden; }
+        .transcript-header { padding: 8px 12px; background: #EDE9FE; font-size: 0.8rem; font-weight: 800; color: #5B21B6; cursor: pointer; display: flex; justify-content: space-between; }
+        .transcript-body { max-height: 180px; overflow-y: auto; padding: 10px 12px; font-size: 0.78rem; line-height: 1.5; color: #334155; white-space: pre-wrap; font-family: monospace; }
+
+        #toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: 8px; width: 90%; max-width: 360px; }
+        .toast { background-color: var(--text-main); color: white; padding: 0.65rem 1rem; border-radius: var(--radius-md); font-size: 0.8rem; text-align: center; box-shadow: var(--shadow-md); }
+        .toast.error { background-color: var(--danger); }
+
+        .divider-or { text-align:center; font-size:0.75rem; color:var(--text-muted); font-weight:700; position:relative; }
+        .rec-badge { display: none; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 800; color: var(--danger); }
+        .rec-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--danger); display: inline-block; animation: recPulse 1s infinite; }
+        @keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .detail-card { background: var(--bg-main); padding: 1rem; border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem; }
+        .detail-row { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
+        .detail-label { color: var(--text-muted); font-weight: 600; }
+        .detail-val { font-weight: 700; color: var(--text-main); }
+        .action-button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 0.5rem; }
+        
+        .dropzone { border: 2px dashed #C7D2FE; background: #EEF2FF; border-radius: var(--radius-md); padding: 1.5rem; text-align: center; cursor: pointer; transition: 0.2s; }
+        .dropzone:hover { border-color: var(--primary); background: #E0E7FF; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-container">
+            <div class="brand">
+                <h1>ROEN VOCAL CARE</h1>
+                <p>AI 개인 레슨 비서 — 주간 시간표 & A4 리포트 자동화</p>
+            </div>
+            <div class="header-status-group">
+                <div id="teacher-profile-badge" class="teacher-badge" onclick="showTeacherProfileModal()"></div>
+                <div class="api-key-badge" onclick="showApiKeySetupModal()">🔑 Gemini API 설정</div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="tab-nav">
+            <button class="tab-btn active" id="tab-btn-timetable" onclick="switchView('timetable')">🗓️ 이번 주 레슨 시간표</button>
+            <button class="tab-btn" id="tab-btn-registry" onclick="switchView('registry')">📋 학생 관리 (고정 스케줄)</button>
+        </div>
+
+        <div class="action-bar">
+            <div class="search-box">
+                <input type="text" id="student-search" class="search-input" placeholder="수강생 검색 (이름, 반, 연령, 전화번호, 요일)" oninput="renderCurrentView()">
+            </div>
+            <div id="vocal-count-label" class="btn btn-secondary" style="cursor:default; font-weight:700;">수강생 계산 중...</div>
+            <div class="btn-group">
+                <button class="btn btn-ai" onclick="openAutoRosterModal()">📸 명부 사진/텍스트 일괄 등록</button>
+                <button class="btn btn-primary" onclick="openAddStudentModal()">+ 직접 수강생 등록</button>
+                <button class="btn btn-secondary" onclick="openDirectReportModal()">✨ A4 보컬 리포트 생성</button>
+            </div>
+        </div>
+
+        <div id="timetable-container"></div>
+        <div id="registry-container" style="display:none;"></div>
+    </main>
+
+    <datalist id="subject-suggestions">
+        <option value="보컬 입시반">
+        <option value="보컬 취미반">
+        <option value="보컬 전문반">
+        <option value="보컬 오디션반">
+        <option value="보컬 데뷔반">
+        <option value="싱어송라이팅반">
+        <option value="뮤지컬 보컬반">
+        <option value="축가/단기완성반">
+    </datalist>
+
+    <datalist id="age-suggestions">
+        <option value="성인">
+        <option value="고등">
+        <option value="중등">
+        <option value="초등">
+        <option value="유아">
+    </datalist>
+
+    <div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-title"></h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer" id="modal-footer"></div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCLKFxUdbpqziQ4JdOsGKc91-LN_G1qQYc",
+            authDomain: "roen-erp.firebaseapp.com",
+            projectId: "roen-erp",
+            storageBucket: "roen-erp.firebasestorage.app",
+            messagingSenderId: "392657588516",
+            appId: "1:392657588516:web:87720c0b0012c2cf5763b1",
+            measurementId: "G-NJ3273LQPB"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const TEACHER_STORAGE_KEY = "roen_current_teacher_name";
+        let currentTeacherName = localStorage.getItem(TEACHER_STORAGE_KEY) || "오인서";
+
+        const API_KEY_STORAGE_KEY = "roen_gemini_api_key_v1";
+        const DEFAULT_API_KEY = "AQ.Ab8RN6JoSWUuZ2Ry3UMKAdrLQDUZukKSl6A_rYNHtTkYMV7Wng";
+
+        function getActiveApiKey() {
+            return localStorage.getItem(API_KEY_STORAGE_KEY) || DEFAULT_API_KEY;
+        }
+
+        const GEMINI_MODELS = [
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview"
+        ];
+
+        function cleanAndParseJSON(rawText) {
+            if (!rawText) throw new Error("응답 데이터가 비어있습니다.");
+            let cleaned = rawText.trim();
+            if (cleaned.startsWith("```json")) {
+                cleaned = cleaned.replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+            } else if (cleaned.startsWith("```")) {
+                cleaned = cleaned.replace(/^```\s*/i, "").replace(/\s*```$/, "");
+            }
+            return JSON.parse(cleaned);
+        }
+
+        const STEP2_CHAPTER_SCHEMA = {
+            type: "ARRAY",
+            description: "레슨 전체(00:00부터 종료 시각까지)를 균등 분할한 8~12개 핵심 챕터 목록",
+            items: {
+                type: "OBJECT",
+                properties: {
+                    focusTag: { type: "STRING", description: "핵심 훈련 목표/주제" },
+                    title: { type: "STRING", description: "챕터 제목" },
+                    time: { type: "STRING", description: "실제 타임스탬프 구간" },
+                    desc: { type: "STRING", description: "사실 기반 3요소 서술: [강사 진단 큐] + [학생 소리 변화/반응] + [자가 연습 팁]. 핵심 발성어는 **볼드** 처리." }
+                },
+                required: ["focusTag", "title", "time", "desc"]
+            }
+        };
+
+        const STEP3_REPORT_SCHEMA = {
+            type: "OBJECT",
+            properties: {
+                subtitle: { type: "STRING", description: "레슨 성격을 관통하는 서브타이틀" },
+                chapters: {
+                    type: "ARRAY",
+                    items: {
+                        type: "OBJECT",
+                        properties: {
+                            focusTag: { type: "STRING" },
+                            title: { type: "STRING" },
+                            time: { type: "STRING" },
+                            desc: { type: "STRING" }
+                        },
+                        required: ["focusTag", "title", "time", "desc"]
+                    }
+                },
+                todaysPoint: { type: "STRING", description: "오늘 레슨 전체를 관통하는 핵심 요약 1~2줄" },
+                selfCheck: {
+                    type: "ARRAY",
+                    items: { type: "STRING" },
+                    description: "다음 레슨 전 집에서 연습할 체크리스트 3개 항목"
+                }
+            },
+            required: ["subtitle", "chapters", "todaysPoint", "selfCheck"]
+        };
+
+        const OCR_STUDENT_SCHEMA = {
+            type: "ARRAY",
+            items: {
+                type: "OBJECT",
+                properties: {
+                    name: { type: "STRING", description: "학생 이름" },
+                    gender: { type: "STRING", description: "성별" },
+                    ageGroup: { type: "STRING", description: "연령대" },
+                    day: { type: "STRING", description: "요일" },
+                    time: { type: "STRING", description: "시간" },
+                    duration: { type: "INTEGER", description: "수업 시간(분) - 30분 표기가 있으면 30, 없으면 60" },
+                    phone: { type: "STRING", description: "전화번호" },
+                    subject: { type: "STRING", description: "수강 과목/반" },
+                    note: { type: "STRING", description: "특이사항" }
+                },
+                required: ["name", "day", "time", "subject"]
+            }
+        };
+
+        let studentList = [];
+        let weeklyOverrides = {};
+        let currentView = 'timetable';
+
+        function sanitizeStudentList(rawList) {
+            if (!Array.isArray(rawList)) return [];
+            const seen = new Set();
+            const cleanList = [];
+            rawList.forEach(s => {
+                const uniqueKey = `${s.name}_${s.defaultTime}_${s.subject || ''}`;
+                if (!seen.has(uniqueKey)) {
+                    seen.add(uniqueKey);
+                    // 기본 duration 60분으로 보정 (기존 30분 표기가 이름/과목에 있으면 30분 자동 감지)
+                    let duration = s.duration;
+                    if (!duration) {
+                        duration = (s.name && s.name.includes('30분')) || (s.subject && s.subject.includes('30분')) ? 30 : 60;
+                    }
+                    cleanList.push({ ...s, duration });
+                }
+            });
+            return cleanList;
+        }
+
+        function initFirestoreSync() {
+            updateTeacherBadge();
+            const teacherRef = db.collection("teachers").doc(currentTeacherName);
+            
+            teacherRef.onSnapshot((doc) => {
+                if (doc.exists) {
+                    const rawStudents = doc.data().students || [];
+                    studentList = sanitizeStudentList(rawStudents);
+                    weeklyOverrides = doc.data().weeklyOverrides || {};
+                } else {
+                    studentList = [];
+                    weeklyOverrides = {};
+                }
+                renderCurrentView();
+            }, (err) => {
+                console.error("동기화 실패:", err);
+                showToast("데이터 동기화 에러", "error");
+            });
+        }
+
+        function saveTeacherData() {
+            studentList = sanitizeStudentList(studentList);
+            db.collection("teachers").doc(currentTeacherName).set({
+                students: studentList,
+                weeklyOverrides: weeklyOverrides,
+                lastUpdated: new Date()
+            }).catch(e => {
+                console.error("저장 실패:", e);
+                showToast("클라우드 저장 실패", "error");
+            });
+        }
+
+        function updateTeacherBadge() {
+            const el = document.getElementById('teacher-profile-badge');
+            if (el) el.innerHTML = `🎤 <strong>${escapeHtml(currentTeacherName)}</strong> 강사님 <span style="font-size:0.7rem; opacity:0.8;">▼</span>`;
+        }
+
+        function showTeacherProfileModal() {
+            const bodyHtml = `
+                <div class="form-group">
+                    <label>강사 이름 변경 (개인 계정 데이터 격리)</label>
+                    <input type="text" id="teacher-name-input" class="form-control" value="${escapeHtml(currentTeacherName)}" placeholder="강사 성함 입력">
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+                        강사 성함에 따라 학생 명부와 시간표 데이터가 완전히 분리되어 관리됩니다.
+                    </p>
+                </div>
+            `;
+            showModal("강사 프로필 설정", bodyHtml, `
+                <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+                <button class="btn btn-primary" onclick="saveTeacherProfile()">저장 및 전환</button>
+            `);
+        }
+
+        function saveTeacherProfile() {
+            const input = document.getElementById('teacher-name-input');
+            if (input && input.value.trim()) {
+                currentTeacherName = input.value.trim();
+                localStorage.setItem(TEACHER_STORAGE_KEY, currentTeacherName);
+                closeModal();
+                initFirestoreSync();
+                showToast(`[${currentTeacherName}] 강사님 전용 공간으로 전환되었습니다.`);
+            }
+        }
+
+        function showApiKeySetupModal() {
+            const currentKey = getActiveApiKey();
+            const bodyHtml = `
+                <div class="form-group">
+                    <label>Gemini API Key 설정</label>
+                    <input type="text" id="manual-api-key-input" class="form-control" value="${escapeHtml(currentKey)}" placeholder="API 키 입력">
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
+                        Google AI Studio에서 발급받은 정식 API 키가 연동되어 있습니다.
+                    </p>
+                </div>
+            `;
+            showModal("🔑 Gemini API 설정", bodyHtml, `
+                <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+                <button class="btn btn-primary" onclick="saveApiKeySetting()">키 저장하기</button>
+            `);
+        }
+
+        function saveApiKeySetting() {
+            const input = document.getElementById('manual-api-key-input');
+            if (input && input.value.trim()) {
+                localStorage.setItem(API_KEY_STORAGE_KEY, input.value.trim());
+                showToast("Gemini API Key가 저장되었습니다.");
+                closeModal();
+            } else {
+                localStorage.removeItem(API_KEY_STORAGE_KEY);
+                showToast("기본 API Key로 복원되었습니다.");
+                closeModal();
+            }
+        }
+
+        const TIMETABLE_DAYS = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+        
+        // 1시간 고정 슬롯 (10:00 ~ 22:00)
+        const TIMETABLE_HOURS = ['10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
+        
+        // 입력 폼 공용 선택 슬롯 (30분 단위)
+        const ALL_FORM_TIME_SLOTS = [
+            '10:00','10:30','11:00','11:30','12:00','12:30',
+            '13:00','13:30','14:00','14:30','15:00','15:30',
+            '16:00','16:30','17:00','17:30','18:00','18:30',
+            '19:00','19:30','20:00','20:30','21:00','21:30','22:00','22:30'
+        ];
+
+        function switchView(viewName) {
+            currentView = viewName;
+            const timetableEl = document.getElementById('timetable-container');
+            const registryEl = document.getElementById('registry-container');
+            const tBtn = document.getElementById('tab-btn-timetable');
+            const rBtn = document.getElementById('tab-btn-registry');
+
+            if (viewName === 'timetable') {
+                timetableEl.style.display = 'block';
+                registryEl.style.display = 'none';
+                tBtn.classList.add('active');
+                rBtn.classList.remove('active');
+            } else {
+                timetableEl.style.display = 'none';
+                registryEl.style.display = 'block';
+                tBtn.classList.remove('active');
+                rBtn.classList.add('active');
+            }
+            renderCurrentView();
+        }
+
+        function renderCurrentView() {
+            if (currentView === 'timetable') {
+                renderWeeklyTimetable();
+            } else {
+                renderStudentRegistry();
+            }
+        }
+
+        // 💡 [정밀 시간 파서: 30분/60분 duration 반영]
+        function parseNormalizedTime(timeStr, studentDuration = 60) {
+            if (!timeStr) return { day: '기타', timeFormatted: '시간미정', sortKey: 9999, hourSlot: '', isHalfPast: false, startTotalMinutes: 0, endTotalMinutes: 60, duration: studentDuration };
+
+            let day = '기타';
+            if (timeStr.includes('월')) day = '월요일';
+            else if (timeStr.includes('화')) day = '화요일';
+            else if (timeStr.includes('수')) day = '수요일';
+            else if (timeStr.includes('목')) day = '목요일';
+            else if (timeStr.includes('금')) day = '금요일';
+            else if (timeStr.includes('토')) day = '토요일';
+            else if (timeStr.includes('일')) day = '일요일';
+            else if (timeStr.includes('매주변동')) day = '매주변동';
+            else if (timeStr.includes('휴강')) day = '휴강중';
+
+            let hour = 12;
+            let minute = 0;
+            let timeFound = false;
+
+            const colonMatch = timeStr.match(/(\d{1,2}):(\d{2})/);
+            if (colonMatch) {
+                hour = parseInt(colonMatch[1], 10);
+                minute = parseInt(colonMatch[2], 10);
+                timeFound = true;
+            } else {
+                const koreanMatch = timeStr.match(/(\d{1,2})(?:시)?(?:\s*(\d{1,2})분)?/);
+                if (koreanMatch && koreanMatch[1]) {
+                    hour = parseInt(koreanMatch[1], 10);
+                    minute = koreanMatch[2] ? parseInt(koreanMatch[2], 10) : 0;
+                    timeFound = true;
+                }
+            }
+
+            if (timeFound && hour >= 1 && hour <= 9) hour += 12; // 1~9시는 오후 13~21시로 자동 보정
+
+            const dayOrder = { '월요일':1, '화요일':2, '수요일':3, '목요일':4, '금요일':5, '토요일':6, '일요일':7, '매주변동':8, '휴강중':9, '기타':10 };
+            const sortKey = (dayOrder[day] || 99) * 10000 + hour * 100 + minute;
+            const timeFormatted = timeFound ? `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}` : '시간미정';
+            const hourSlot = timeFound ? `${String(hour).padStart(2,'0')}:00` : '';
+            const isHalfPast = minute >= 30;
+
+            const startTotalMinutes = hour * 60 + minute;
+            const duration = parseInt(studentDuration, 10) || 60;
+            const endTotalMinutes = startTotalMinutes + duration;
+
+            return { day, timeFormatted, sortKey, hourSlot, isHalfPast, startTotalMinutes, endTotalMinutes, duration };
+        }
+
+        // 💡 [1시간 고정 시간표: 60분 풀사이즈 vs 30분 반칸 렌더러]
+        function renderWeeklyTimetable() {
+            const container = document.getElementById('timetable-container');
+            const q = document.getElementById('student-search').value.toLowerCase();
+
+            const countLabel = document.getElementById('vocal-count-label');
+            if (countLabel) countLabel.textContent = `🎤 ${currentTeacherName} 강사님 수강생 총 ${studentList.length}명 관리 중`;
+
+            if (studentList.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:3.5rem; color:var(--text-muted); background:var(--surface); border-radius:var(--radius-lg); border:1px dashed var(--border);">
+                        <div style="font-size:1.1rem; font-weight:700; color:var(--text-main); margin-bottom:0.5rem;">등록된 수강생이 없습니다.</div>
+                        <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">학원 시간표 캡처본을 올리거나 수강생을 등록하세요.</div>
+                        <div style="display:flex; justify-content:center; gap:8px;">
+                            <button class="btn btn-ai" onclick="openAutoRosterModal()">📸 명부 캡처본/텍스트로 자동 등록</button>
+                            <button class="btn btn-primary" onclick="openAddStudentModal()">+ 직접 등록</button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // 1시간 셀 내부: full(60분), top(:00~:30), bottom(:30~:00) 분할
+            const gridMap = {};
+            TIMETABLE_HOURS.forEach(slot => {
+                gridMap[slot] = {};
+                TIMETABLE_DAYS.forEach(day => { 
+                    gridMap[slot][day] = { full: [], top: [], bottom: [] }; 
+                });
+            });
+
+            const others = [];
+            const activeStudents = [];
+
+            // 1단계: 수강생 데이터 파싱 (duration 반영)
+            studentList.forEach((s, idx) => {
+                const override = weeklyOverrides[s.id];
+                const activeTimeStr = override ? `${override.day} ${override.time}` : s.defaultTime;
+                const activeDuration = override ? (override.duration || s.duration || 60) : (s.duration || 60);
+                const parsed = parseNormalizedTime(activeTimeStr, activeDuration);
+
+                const studentObj = {
+                    ...s,
+                    origIdx: idx,
+                    activeDay: parsed.day,
+                    activeTime: parsed.timeFormatted,
+                    activeDuration: parsed.duration,
+                    hourSlot: parsed.hourSlot,
+                    isHalfPast: parsed.isHalfPast,
+                    startMin: parsed.startTotalMinutes,
+                    endMin: parsed.endTotalMinutes,
+                    isModified: !!override,
+                    isConflict: false
+                };
+
+                activeStudents.push(studentObj);
+            });
+
+            // 2단계: 수학적 구간 충돌 검사 (Max(StartA, StartB) < Min(EndA, EndB))
+            for (let i = 0; i < activeStudents.length; i++) {
+                for (let j = i + 1; j < activeStudents.length; j++) {
+                    const A = activeStudents[i];
+                    const B = activeStudents[j];
+
+                    if (A.activeDay === B.activeDay && A.id !== B.id) {
+                        const isOverlap = Math.max(A.startMin, B.startMin) < Math.min(A.endMin, B.endMin);
+                        if (isOverlap) {
+                            A.isConflict = true;
+                            B.isConflict = true;
+                        }
+                    }
+                }
+            }
+
+            // 3단계: 시간표 그리드 매핑 (60분은 full, 30분은 top/bottom)
+            activeStudents.forEach(s => {
+                if (q && !(s.name.toLowerCase().includes(q) || (s.subject && s.subject.toLowerCase().includes(q)) || (s.ageGroup && s.ageGroup.toLowerCase().includes(q)) || (s.phone && s.phone.includes(q)))) {
+                    return;
+                }
+
+                if (TIMETABLE_DAYS.includes(s.activeDay) && gridMap[s.hourSlot]) {
+                    if (s.activeDuration >= 60) {
+                        gridMap[s.hourSlot][s.activeDay].full.push(s);
+                    } else if (s.isHalfPast) {
+                        gridMap[s.hourSlot][s.activeDay].bottom.push(s);
+                    } else {
+                        gridMap[s.hourSlot][s.activeDay].top.push(s);
+                    }
+                } else {
+                    others.push(s);
+                }
+            });
+
+            function renderCard(s, isFull = false) {
+                const durationLabel = s.activeDuration === 30 ? '30분' : '60분';
+                return `
+                    <div class="grid-student-card ${isFull ? 'full-card' : ''} ${s.isConflict ? 'conflict' : (s.isModified ? 'temp-changed' : '')}" onclick="openLessonActionModal(${s.origIdx})">
+                        <div class="card-header">
+                            <div>
+                                <span class="card-name">${escapeHtml(s.name)}</span>
+                                <span class="card-duration-badge">${durationLabel}</span>
+                            </div>
+                            <span class="card-tag ${s.isConflict ? 'conflict-tag' : (s.isModified ? 'mod' : '')}">
+                                ${s.isConflict ? '🚨중복' : (s.isModified ? '변동' : '고정')}
+                            </span>
+                        </div>
+                        <div style="font-size:0.65rem; color:var(--text-muted); margin-top:1px;">
+                            ${escapeHtml(s.activeTime)} · ${escapeHtml(s.subject || '보컬')} ${s.ageGroup ? `(${escapeHtml(s.ageGroup)})` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            let tableHtml = `
+                <div class="teacher-block">
+                    <div class="teacher-header">
+                        <span style="font-size:1.05rem; font-weight:800;">🗓️ 이번 주 라이브 레슨 스케줄 (1시간 기본 / 30분·60분 스마트 뷰)</span>
+                        <span style="font-size:0.75rem; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:12px;">클릭 시 리포트 원스톱 실행</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="timetable-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:70px;">시간</th>
+                                    ${TIMETABLE_DAYS.map(d => `<th>${d}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            TIMETABLE_HOURS.forEach(slot => {
+                tableHtml += `<tr><td class="time-col">${slot}</td>`;
+                TIMETABLE_DAYS.forEach(day => {
+                    const cellData = gridMap[slot][day];
+                    const fullList = cellData.full;
+                    const topList = cellData.top;
+                    const bottomList = cellData.bottom;
+
+                    tableHtml += `<td>`;
+                    if (fullList.length > 0) {
+                        // 60분 수업 학생이 있는 경우 (셀 전체 100% 활용)
+                        tableHtml += `
+                            <div class="full-slot">
+                                ${fullList.map(s => renderCard(s, true)).join('')}
+                                ${topList.map(s => renderCard(s, false)).join('')}
+                                ${bottomList.map(s => renderCard(s, false)).join('')}
+                            </div>
+                        `;
+                    } else {
+                        // 30분 수업 학생들 (상단 :00~:30 / 하단 :30~:00 반칸 분할)
+                        tableHtml += `
+                            <div class="hour-cell-container">
+                                <div class="half-slot top">
+                                    ${topList.map(s => renderCard(s, false)).join('')}
+                                </div>
+                                <div class="half-slot">
+                                    ${bottomList.map(s => renderCard(s, false)).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    tableHtml += `</td>`;
+                });
+                tableHtml += `</tr>`;
+            });
+
+            tableHtml += `</tbody></table></div></div>`;
+
+            const othersHtml = others.length > 0 ? `
+                <div style="margin-top:1rem; background:var(--surface); border-radius:var(--radius-lg); border:1px solid var(--border); padding:1rem;">
+                    <div style="font-weight:700; font-size:0.85rem; margin-bottom:0.5rem;">📌 특수 시간대 / 변동 / 휴강 수강생 (${others.length}명)</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                        ${others.map(s => `
+                            <div class="grid-student-card" style="display:inline-block; min-width:160px;" onclick="openLessonActionModal(${s.origIdx})">
+                                <div class="card-header">
+                                    <div>
+                                        <span class="card-name">${escapeHtml(s.name)}</span>
+                                        <span class="card-duration-badge">${s.activeDuration}분</span>
+                                    </div>
+                                    <span class="card-tag ${s.isConflict ? 'conflict-tag' : ''}">${s.isConflict ? '🚨중복' : escapeHtml(s.activeDay)}</span>
+                                </div>
+                                <div style="font-size:0.68rem; color:var(--text-muted);">${escapeHtml(s.defaultTime)} · ${escapeHtml(s.subject || '보컬')}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : '';
+
+            container.innerHTML = tableHtml + othersHtml;
+        }
+
+        function renderStudentRegistry() {
+            const container = document.getElementById('registry-container');
+            const q = document.getElementById('student-search').value.toLowerCase();
+
+            const filtered = studentList.filter(s => 
+                s.name.toLowerCase().includes(q) || 
+                (s.phone && s.phone.includes(q)) || 
+                (s.ageGroup && s.ageGroup.toLowerCase().includes(q)) ||
+                (s.defaultTime && s.defaultTime.toLowerCase().includes(q)) ||
+                (s.subject && s.subject.toLowerCase().includes(q))
+            );
+
+            const rowsHtml = filtered.map((s, idx) => {
+                const parsed = parseNormalizedTime(s.defaultTime, s.duration || 60);
+                const historyCount = s.reportHistory ? s.reportHistory.length : 0;
+                const dur = s.duration || 60;
+
+                return `
+                    <tr class="clickable-row" onclick="openStudentDetailModal(${idx})">
+                        <td>
+                            <span class="day-badge ${parsed.day.charAt(0)}">${escapeHtml(s.defaultTime)}</span>
+                            <span class="duration-chip">${dur}분 레슨</span>
+                        </td>
+                        <td>
+                            <strong>${escapeHtml(s.name)}</strong>
+                            ${s.ageGroup ? `<span class="age-badge">${escapeHtml(s.ageGroup)}</span>` : ''}
+                        </td>
+                        <td>${escapeHtml(s.gender || '-')}</td>
+                        <td>${escapeHtml(s.phone || '-')}</td>
+                        <td><span style="font-weight:700; color:#312E81;">${escapeHtml(s.subject || '보컬')}</span></td>
+                        <td><span style="font-weight:700; color:var(--primary);">${historyCount}건 완료</span></td>
+                        <td>${escapeHtml(s.note || '-')}</td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openStudentDetailModal(${idx})">⚙️ 관리</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="teacher-block">
+                    <div class="teacher-header">
+                        <span style="font-size:1.05rem; font-weight:800;">📋 수강생 마스터 명부 (기본 고정 스케줄)</span>
+                        <span style="font-size:0.8rem; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:12px;">수강생 ${filtered.length}명</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="list-table">
+                            <thead>
+                                <tr>
+                                    <th>기본 고정 시간 및 수업 길이</th>
+                                    <th>학생명 (연령)</th>
+                                    <th>성별</th>
+                                    <th>전화번호</th>
+                                    <th>수강반/과목</th>
+                                    <th>누적 리포트</th>
+                                    <th>특이사항</th>
+                                    <th>관리</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml || `<tr><td colspan="8" style="text-align:center; padding:2rem; color:var(--text-muted);">등록된 학생이 없습니다.</td></tr>`}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function openAutoRosterModal() {
+            const bodyHtml = `
+                <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.4;">
+                    학원 ERP 시간표 캡처본, 엑셀 캡처, 카카오톡 명부 사진 또는 텍스트를 입력하면 AI가 학생명, 요일/시간, <strong>수업 시간(30분/60분)</strong>, 수강반, 연령대를 자동으로 정리합니다.
+                </div>
+
+                <div class="paste-section" style="border-top:none; padding-top:0;">
+                    <div style="font-weight:700; font-size:0.9rem;">🖼️ 시간표/명부 캡처 이미지 선택 (클립보드 붙여넣기도 가능)</div>
+                    <div class="dropzone" id="roster-dropzone" onclick="document.getElementById('roster-image-input').click()">
+                        <div style="font-size:1.5rem; margin-bottom:4px;">📷</div>
+                        <div style="font-weight:700; color:var(--primary); font-size:0.85rem;">시간표/명부 캡처 이미지 업로드</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted);">클릭하거나 이미지를 여기로 드래그하세요</div>
+                    </div>
+                    <input type="file" id="roster-image-input" accept="image/*" style="display:none;" onchange="handleRosterImageSelected(this)">
+                </div>
+
+                <div class="divider-or">또는</div>
+
+                <div class="paste-section">
+                    <div style="font-weight:700; font-size:0.9rem;">📝 카카오톡/엑셀 명부 텍스트 직접 붙여넣기</div>
+                    <textarea id="roster-text-input" class="paste-textarea" placeholder="예: 월 19:00 홍길동(성인/취미반/30분) 010-1234-5678, 월 20:00 김철수(고등/오디션반/60분)..."></textarea>
+                    <button class="btn btn-ai" onclick="processTextRoster()">✨ 텍스트 분석하여 명부 일괄 추가</button>
+                </div>
+
+                <div id="roster-parse-status"></div>
+            `;
+            showModal("📸 AI 수강생 명부 일괄 자동 등록", bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">닫기</button>`);
+
+            setTimeout(() => {
+                const dz = document.getElementById('roster-dropzone');
+                if (dz) {
+                    window.onpaste = (e) => {
+                        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                        for (let item of items) {
+                            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                                const file = item.getAsFile();
+                                processImageRoster(file);
+                                break;
+                            }
+                        }
+                    };
+                }
+            }, 100);
+        }
+
+        function handleRosterImageSelected(input) {
+            if (input.files && input.files[0]) {
+                processImageRoster(input.files[0]);
+            }
+        }
+
+        async function processImageRoster(file) {
+            const statusEl = document.getElementById('roster-parse-status');
+            statusEl.innerHTML = `
+                <div class="step-progress-box">
+                    <div class="step-row active"><div class="step-spinner"></div><span>Gemini Vision이 시간표/명부 이미지를 분석 중입니다...</span></div>
+                </div>
+            `;
+
+            try {
+                const reader = new FileReader();
+                const base64Promise = new Promise((resolve) => {
+                    reader.onload = () => resolve(reader.result.split(',')[1]);
+                    reader.readAsDataURL(file);
+                });
+                const base64Data = await base64Promise;
+
+                const prompt = `이 이미지는 음악/보컬 학원의 시간표 또는 수강생 명부입니다.
+이미지를 정밀하게 판독하여 OCR_STUDENT_SCHEMA 형식의 JSON 배열로 추출하세요.
+1. 요일(월요일~일요일)과 시간(HH:MM)을 정확히 추출하세요.
+2. 30분 수업 표기(30분, 0.5h 등)가 있으면 duration을 30으로, 별도 표기가 없으면 기본 60으로 지정하세요.
+3. 반/과목 이름은 이미지에 적힌 그대로 정확히 보존하세요.
+4. 차량번호, 결제 정보 등 불필요한 행정 정보는 과감히 버리세요.`;
+
+                const payload = {
+                    systemInstruction: { parts: [{ text: "당신은 보컬 아카데미 행정 전산 전문가입니다. 이미지 내 시간표와 학생 목록을 정밀한 JSON 명부로 변환합니다." }] },
+                    contents: [{
+                        parts: [
+                            { inlineData: { mimeType: file.type, data: base64Data } },
+                            { text: prompt }
+                        ]
+                    }],
+                    generationConfig: { responseMimeType: "application/json", responseSchema: OCR_STUDENT_SCHEMA, temperature: 0.1 }
+                };
+
+                const jsonStr = await executeGeminiRequest(payload);
+                const students = cleanAndParseJSON(jsonStr);
+                applyParsedStudents(students);
+            } catch (err) {
+                statusEl.innerHTML = `<div class="chapter-box" style="color:var(--danger); font-weight:700;">❌ 명부 판독 실패: ${escapeHtml(err.message)}</div>`;
+                showToast("명부 이미지 판독 실패: " + err.message, "error");
+            }
+        }
+
+        async function processTextRoster() {
+            const text = document.getElementById('roster-text-input').value.trim();
+            if (!text) { showToast("텍스트를 입력해주세요.", "error"); return; }
+
+            const statusEl = document.getElementById('roster-parse-status');
+            statusEl.innerHTML = `
+                <div class="step-progress-box">
+                    <div class="step-row active"><div class="step-spinner"></div><span>텍스트 명부를 구조화된 데이터로 변환 중입니다...</span></div>
+                </div>
+            `;
+
+            try {
+                const prompt = `다음은 강사가 복사한 학원 명부 또는 시간표 텍스트입니다:
+${text}
+
+위 텍스트에서 학생 목록을 추출하여 OCR_STUDENT_SCHEMA 형식의 JSON 배열로 생성하세요.
+시간(HH:MM)과 수업 시간(30분 표기가 있으면 duration 30, 없으면 60)을 구분하세요.`;
+
+                const payload = {
+                    systemInstruction: { parts: [{ text: "당신은 보컬 학원 전산 데이터 정리 전문가입니다." }] },
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: "application/json", responseSchema: OCR_STUDENT_SCHEMA, temperature: 0.1 }
+                };
+
+                const jsonStr = await executeGeminiRequest(payload);
+                const students = cleanAndParseJSON(jsonStr);
+                applyParsedStudents(students);
+            } catch (err) {
+                statusEl.innerHTML = `<div class="chapter-box" style="color:var(--danger); font-weight:700;">❌ 텍스트 분석 실패: ${escapeHtml(err.message)}</div>`;
+                showToast("텍스트 분석 실패: " + err.message, "error");
+            }
+        }
+
+        function applyParsedStudents(parsedList) {
+            if (!Array.isArray(parsedList) || parsedList.length === 0) {
+                showToast("추출된 학생 정보가 없습니다.", "error");
+                return;
+            }
+
+            let addedCount = 0;
+            parsedList.forEach(p => {
+                if (!p.name) return;
+                const newStudent = {
+                    id: "std_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+                    name: p.name.trim(),
+                    gender: p.gender || '남',
+                    ageGroup: p.ageGroup || '성인',
+                    defaultTime: `${p.day || '월요일'} ${p.time || '14:00'}`,
+                    duration: parseInt(p.duration, 10) === 30 ? 30 : 60,
+                    phone: p.phone || '',
+                    subject: p.subject || '보컬',
+                    note: p.note || '',
+                    reportHistory: [],
+                    createdAt: new Date().toISOString()
+                };
+                studentList.push(newStudent);
+                addedCount++;
+            });
+
+            saveTeacherData();
+            closeModal();
+            renderCurrentView();
+            showToast(`총 ${addedCount}명의 수강생이 명부에 등록되었습니다.`);
+        }
+
+        function openLessonActionModal(idx) {
+            const student = studentList[idx];
+            const override = weeklyOverrides[student.id];
+            const activeTime = override ? `${override.day} ${override.time} (이번 주 변동)` : student.defaultTime;
+            const activeDur = override ? (override.duration || student.duration || 60) : (student.duration || 60);
+            const history = student.reportHistory || [];
+            const lastReport = history.length > 0 ? history[0] : null;
+
+            const bodyHtml = `
+                <div class="detail-card">
+                    <div class="detail-row"><span class="detail-label">수강생</span><span class="detail-val" style="color:var(--primary); font-size:1rem;">${escapeHtml(student.name)} ${student.ageGroup ? `(${escapeHtml(student.ageGroup)})` : ''} · ${escapeHtml(student.subject || '보컬')}</span></div>
+                    <div class="detail-row"><span class="detail-label">현재 스케줄</span><span class="detail-val" style="color:#C2410C;">${escapeHtml(activeTime)} (${activeDur}분 수업)</span></div>
+                </div>
+
+                ${lastReport ? `
+                    <div style="background:#F8FAFC; border:1px solid #C7D2FE; border-radius:8px; padding:0.8rem; font-size:0.82rem;">
+                        <div style="font-weight:800; color:#4338CA; margin-bottom:3px;">📜 지난 레슨 핵심 큐 (${escapeHtml(lastReport.date)})</div>
+                        <div style="color:#1E1B4B; margin-bottom:4px; font-weight:600;">"${escapeHtml(lastReport.data.todaysPoint || '-')}"</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted);">과제: ${(lastReport.data.selfCheck || []).join(' · ')}</div>
+                    </div>
+                ` : `<div style="font-size:0.8rem; color:var(--text-muted); background:var(--bg-main); padding:0.6rem; border-radius:6px;">이전 레슨 기록이 없습니다. 첫 레슨을 시작하세요!</div>`}
+
+                <div class="action-button-grid">
+                    <button class="btn btn-ai" style="grid-column: span 2; padding:0.8rem;" onclick="closeModal(); openReportModalForStudent('${escapeHtml(student.name)}')">
+                        🎙️ 오늘 레슨 시작 & A4 리포트 생성
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal(); openRescheduleModal(${idx})">🔄 이번 주만 시간/수업길이 변경</button>
+                    <button class="btn btn-secondary" onclick="closeModal(); openReportHistoryModal(${idx})">📜 전체 레슨 히스토리 (${history.length})</button>
+                </div>
+            `;
+            showModal(`[${student.name}] 레슨 대시보드`, bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">닫기</button>`);
+        }
+
+        function openRescheduleModal(idx) {
+            const student = studentList[idx];
+            const override = weeklyOverrides[student.id];
+            const currentDur = override ? (override.duration || student.duration || 60) : (student.duration || 60);
+
+            const bodyHtml = `
+                <form id="reschedule-form" onsubmit="saveScheduleOverride(event, ${idx})">
+                    <div style="background:var(--bg-main); padding:0.8rem; border-radius:8px; font-size:0.85rem; margin-bottom:1rem;">
+                        <div><strong>대상 수강생:</strong> ${escapeHtml(student.name)}</div>
+                        <div style="color:var(--text-muted); font-size:0.75rem; margin-top:2px;">기본 고정 시간: ${escapeHtml(student.defaultTime)} (${student.duration || 60}분 레슨)</div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group">
+                            <label>이번 주 변경 요일</label>
+                            <select id="reschedule-day" class="form-control">
+                                ${TIMETABLE_DAYS.map(d => `<option value="${d}">${d}</option>`).join('')}
+                                <option value="휴강">이번 주 휴강</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>이번 주 변경 시간</label>
+                            <select id="reschedule-hour" class="form-control">
+                                ${ALL_FORM_TIME_SLOTS.map(s => `<option value="${s}">${s}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top:6px;">
+                        <label>이번 주 수업 시간 (길이)</label>
+                        <select id="reschedule-duration" class="form-control">
+                            <option value="60" ${currentDur === 60 ? 'selected' : ''}>60분 레슨 (1시간 전체)</option>
+                            <option value="30" ${currentDur === 30 ? 'selected' : ''}>30분 레슨 (반타임)</option>
+                        </select>
+                    </div>
+                </form>
+            `;
+
+            showModal("이번 주 스케줄/수업길이 임시 변동", bodyHtml, `
+                ${override ? `<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="resetScheduleOverride('${student.id}')">고정 시간으로 초기화</button>` : ''}
+                <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+                <button class="btn btn-primary" onclick="document.getElementById('reschedule-form').requestSubmit()">변동 적용</button>
+            `);
+        }
+
+        function saveScheduleOverride(e, idx) {
+            e.preventDefault();
+            const student = studentList[idx];
+            const day = document.getElementById('reschedule-day').value;
+            const hour = document.getElementById('reschedule-hour').value;
+            const duration = parseInt(document.getElementById('reschedule-duration').value, 10) || 60;
+
+            weeklyOverrides[student.id] = { day, time: hour, duration };
+            saveTeacherData();
+            closeModal();
+            renderCurrentView();
+            showToast(`${student.name} 학생의 이번 주 스케줄이 변경되었습니다.`);
+        }
+
+        function resetScheduleOverride(studentId) {
+            delete weeklyOverrides[studentId];
+            saveTeacherData();
+            closeModal();
+            renderCurrentView();
+            showToast("기본 고정 스케줄로 복원되었습니다.");
+        }
+
+        function openAddStudentModal() {
+            const bodyHtml = `
+                <form id="add-student-form" onsubmit="saveNewStudent(event)">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group"><label>학생 이름 *</label><input type="text" id="reg-name" class="form-control" required placeholder="예: 옥준우"></div>
+                        <div class="form-group"><label>성별</label>
+                            <select id="reg-gender" class="form-control">
+                                <option value="남">남</option>
+                                <option value="여">여</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group"><label>연령대</label><input type="text" id="reg-age" list="age-suggestions" class="form-control" placeholder="성인 / 고등 / 중등 등"></div>
+                        <div class="form-group">
+                            <label>수강반/과목 *</label>
+                            <input type="text" id="reg-subject" list="subject-suggestions" class="form-control" required placeholder="보컬 취미반, 데뷔반 등 자유입력" value="보컬 취미반">
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group">
+                            <label>기본 고정 요일 *</label>
+                            <select id="reg-day" class="form-control" required>
+                                ${TIMETABLE_DAYS.map(d => `<option value="${d}">${d}</option>`).join('')}
+                                <option value="매주변동">매주변동</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>기본 고정 시간 *</label>
+                            <select id="reg-hour" class="form-control" required>
+                                ${ALL_FORM_TIME_SLOTS.map(s => `<option value="${s}">${s}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>기본 수업 시간 (길이) *</label>
+                        <select id="reg-duration" class="form-control" required>
+                            <option value="60">60분 레슨 (1시간 전체)</option>
+                            <option value="30">30분 레슨 (반타임)</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>전화번호</label><input type="text" id="reg-phone" class="form-control" placeholder="010-0000-0000"></div>
+                    <div class="form-group"><label>특이사항</label><input type="text" id="reg-note" class="form-control" placeholder="목표, 보컬 성향 등"></div>
+                </form>
+            `;
+            showModal("신규 수강생 및 고정 스케줄 직접 등록", bodyHtml, `<button class="btn btn-primary" onclick="document.getElementById('add-student-form').requestSubmit()">저장하기</button>`);
+        }
+
+        function saveNewStudent(e) {
+            e.preventDefault();
+            const name = document.getElementById('reg-name').value.trim();
+            const gender = document.getElementById('reg-gender').value;
+            const ageGroup = document.getElementById('reg-age').value.trim() || '성인';
+            const day = document.getElementById('reg-day').value;
+            const hour = document.getElementById('reg-hour').value;
+            const defaultTime = `${day} ${hour}`;
+            const duration = parseInt(document.getElementById('reg-duration').value, 10) || 60;
+            const phone = document.getElementById('reg-phone').value.trim();
+            const subject = document.getElementById('reg-subject').value.trim() || '보컬';
+            const note = document.getElementById('reg-note').value.trim();
+
+            const newStudent = {
+                id: "std_" + Date.now(),
+                name, gender, ageGroup, defaultTime, duration, phone, subject, note,
+                reportHistory: [],
+                createdAt: new Date().toISOString()
+            };
+
+            studentList.push(newStudent);
+            saveTeacherData();
+            closeModal();
+            renderCurrentView();
+            showToast(`${name} 수강생이 등록되었습니다.`);
+        }
+
+        function openStudentDetailModal(idx) {
+            const student = studentList[idx];
+            const dur = student.duration || 60;
+            const bodyHtml = `
+                <div class="detail-card">
+                    <div class="detail-row"><span class="detail-label">수강생명</span><span class="detail-val" style="font-size:1rem; color:var(--primary);">${escapeHtml(student.name)} (${escapeHtml(student.ageGroup || '성인')} / ${escapeHtml(student.gender || '-')})</span></div>
+                    <div class="detail-row"><span class="detail-label">기본 고정 시간</span><span class="detail-val" style="color:#C2410C;">${escapeHtml(student.defaultTime)} (${dur}분 레슨)</span></div>
+                    <div class="detail-row"><span class="detail-label">수강반/과목</span><span class="detail-val">${escapeHtml(student.subject || '보컬')}</span></div>
+                    <div class="detail-row"><span class="detail-label">전화번호</span><span class="detail-val">${escapeHtml(student.phone || '-')}</span></div>
+                    <div class="detail-row"><span class="detail-label">특이사항</span><span class="detail-val">${escapeHtml(student.note || '-')}</span></div>
+                </div>
+
+                <div class="action-button-grid">
+                    <button class="btn btn-primary" onclick="closeModal(); openEditStudentModal(${idx})">✏️ 정보 / 고정시간 / 수업길이 수정</button>
+                    <button class="btn btn-ai" onclick="closeModal(); openReportModalForStudent('${escapeHtml(student.name)}')">🎙️ A4 리포트 생성</button>
+                    <button class="btn btn-secondary" onclick="closeModal(); openReportHistoryModal(${idx})">📜 레슨 히스토리 (${(student.reportHistory||[]).length})</button>
+                    <button class="btn btn-danger" onclick="deleteStudent(${idx})">🗑️ 수강생 삭제</button>
+                </div>
+            `;
+            showModal(`${student.name} 수강생 상세 관리`, bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">닫기</button>`);
+        }
+
+        function openEditStudentModal(idx) {
+            const student = studentList[idx];
+            const parsed = parseNormalizedTime(student.defaultTime, student.duration || 60);
+            const currentDur = student.duration || 60;
+
+            const bodyHtml = `
+                <form id="edit-student-form" onsubmit="updateStudent(event, ${idx})">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group"><label>학생 이름 *</label><input type="text" id="edit-name" class="form-control" required value="${escapeHtml(student.name)}"></div>
+                        <div class="form-group"><label>성별</label>
+                            <select id="edit-gender" class="form-control">
+                                <option value="남" ${student.gender==='남'?'selected':''}>남</option>
+                                <option value="여" ${student.gender==='여'?'selected':''}>여</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group"><label>연령대</label><input type="text" id="edit-age" list="age-suggestions" class="form-control" value="${escapeHtml(student.ageGroup || '성인')}"></div>
+                        <div class="form-group">
+                            <label>수강반/과목 *</label>
+                            <input type="text" id="edit-subject" list="subject-suggestions" class="form-control" required value="${escapeHtml(student.subject || '보컬')}">
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div class="form-group">
+                            <label>기본 고정 요일 *</label>
+                            <select id="edit-day" class="form-control" required>
+                                ${TIMETABLE_DAYS.map(d => `<option value="${d}" ${parsed.day===d?'selected':''}>${d}</option>`).join('')}
+                                <option value="매주변동" ${parsed.day==='매주변동'?'selected':''}>매주변동</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>기본 고정 시간 *</label>
+                            <select id="edit-hour" class="form-control" required>
+                                ${ALL_FORM_TIME_SLOTS.map(s => `<option value="${s}" ${parsed.timeFormatted===s?'selected':''}>${s}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>기본 수업 시간 (길이) *</label>
+                        <select id="edit-duration" class="form-control" required>
+                            <option value="60" ${currentDur === 60 ? 'selected' : ''}>60분 레슨 (1시간 전체)</option>
+                            <option value="30" ${currentDur === 30 ? 'selected' : ''}>30분 레슨 (반타임)</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>전화번호</label><input type="text" id="edit-phone" class="form-control" value="${escapeHtml(student.phone || '')}"></div>
+                    <div class="form-group"><label>특이사항</label><input type="text" id="edit-note" class="form-control" value="${escapeHtml(student.note || '')}"></div>
+                </form>
+            `;
+            showModal(`${student.name} 정보 및 고정 스케줄 수정`, bodyHtml, `<button class="btn btn-primary" onclick="document.getElementById('edit-student-form').requestSubmit()">수정 완료</button>`);
+        }
+
+        function updateStudent(e, idx) {
+            e.preventDefault();
+            const student = studentList[idx];
+            student.name = document.getElementById('edit-name').value.trim();
+            student.gender = document.getElementById('edit-gender').value;
+            student.ageGroup = document.getElementById('edit-age').value.trim() || '성인';
+            const day = document.getElementById('edit-day').value;
+            const hour = document.getElementById('edit-hour').value;
+            student.defaultTime = `${day} ${hour}`;
+            student.duration = parseInt(document.getElementById('edit-duration').value, 10) || 60;
+            student.phone = document.getElementById('edit-phone').value.trim();
+            student.subject = document.getElementById('edit-subject').value.trim() || '보컬';
+            student.note = document.getElementById('edit-note').value.trim();
+
+            saveTeacherData();
+            closeModal();
+            renderCurrentView();
+            showToast(`${student.name} 수강생 정보가 수정되었습니다.`);
+        }
+
+        function deleteStudent(idx) {
+            if (confirm("정말 삭제하시겠습니까? (누적 리포트 히스토리도 함께 삭제됩니다)")) {
+                const [deleted] = studentList.splice(idx, 1);
+                delete weeklyOverrides[deleted.id];
+                saveTeacherData();
+                closeModal();
+                renderCurrentView();
+                showToast("삭제되었습니다.");
+            }
+        }
+
+        // ==========================================
+        // 🎙️ 3단계 완주 파이프라인
+        // ==========================================
+        let currentTargetStudentName = "";
+        let lastGeneratedChapterData = null;
+        let lastGeneratedTranscript = "";
+        let selectedAudioFiles = [];
+
+        function openDirectReportModal() { openReportModalForStudent("수강생"); }
+
+        function openReportModalForStudent(studentName) {
+            currentTargetStudentName = studentName;
+            selectedAudioFiles = [];
+            lastGeneratedChapterData = null;
+            lastGeneratedTranscript = "";
+
+            const bodyHtml = `
+                <div style="background:var(--bg-main); padding:0.8rem; border-radius:8px; font-size:0.85rem;">
+                    <div><strong>수강생:</strong> <span style="color:var(--primary); font-weight:800;">${escapeHtml(studentName)}</span></div>
+                    <div style="font-size:0.75rem; color:var(--success); font-weight:700; margin-top:2px;">🔒 보안 안심: 레슨 녹음 파일은 분석 직후 서버에서 즉시 영구 파기됩니다.</div>
+                </div>
+
+                <div class="paste-section" style="border-top:none; padding-top:0;">
+                    <div style="font-weight:700; font-size:0.9rem;">🎙️ 통녹음 파일 선택 (50분 통녹 1개 또는 1/2부 다중 파일)</div>
+                    <input type="file" id="audio-file-input" accept="audio/*" multiple class="form-control" onchange="handleMultipleAudioFilesSelected(this)">
+                    <div id="audio-files-status" style="font-size:0.78rem; font-weight:700; color:var(--primary); margin-top:4px;"></div>
+                    <button class="btn btn-ai" id="audio-analyze-btn" onclick="process3StepPipeline('${escapeHtml(studentName)}')" disabled style="margin-top:6px;">
+                        ✨ 3단계 레슨 분석하여 A4 꽉 찬 리포트 생성
+                    </button>
+                </div>
+
+                <div class="divider-or">또는</div>
+
+                <div class="paste-section">
+                    <div style="font-weight:700; font-size:0.9rem;">🔴 지금 실시간 녹음 (48kHz 고음질 스튜디오 모드)</div>
+                    <div style="display:flex; align-items:center; gap:0.6rem;">
+                        <button class="btn btn-danger" id="live-record-start-btn" onclick="startLiveRecording('${escapeHtml(studentName)}')">🎙️ 녹음 시작</button>
+                        <button class="btn btn-secondary" id="live-record-stop-btn" style="display:none;" onclick="stopLiveRecording('${escapeHtml(studentName)}')">⏹️ 녹음 종료 & 분석</button>
+                        <span class="rec-badge" id="live-record-badge"><span class="rec-dot"></span>REC <span id="live-record-timer">00:00</span></span>
+                    </div>
+                </div>
+
+                <div class="divider-or">또는</div>
+
+                <div class="paste-section">
+                    <div style="font-weight:700; font-size:0.9rem;">📝 다글로 / 텍스트 직접 붙여넣기</div>
+                    <textarea id="daglo-paste-input" class="paste-textarea" placeholder="다글로 등에서 추출한 스크립트를 붙여넣으세요..."></textarea>
+                    <button class="btn btn-ai" onclick="processPastedText3Step('${escapeHtml(studentName)}')">✨ 텍스트로 리포트 생성</button>
+                </div>
+
+                <div id="integrated-summary-display"></div>
+            `;
+            showModal(`[${studentName}] A4 프리미엄 레슨 리포트 생성`, bodyHtml, `<button class="btn btn-secondary" onclick="closeModal()">닫기</button>`);
+        }
+
+        function handleMultipleAudioFilesSelected(input) {
+            const files = Array.from(input.files);
+            const statusEl = document.getElementById('audio-files-status');
+            const btn = document.getElementById('audio-analyze-btn');
+            if (files.length === 0) {
+                selectedAudioFiles = [];
+                statusEl.textContent = '';
+                btn.disabled = true;
+                return;
+            }
+            selectedAudioFiles = files;
+            statusEl.textContent = `선택된 파일 총 ${files.length}개`;
+            btn.disabled = false;
+        }
+
+        async function executeGeminiRequest(payload) {
+            const apiKey = getActiveApiKey();
+            if (!apiKey) {
+                showApiKeySetupModal();
+                throw new Error("API Key가 설정되지 않았습니다.");
+            }
+
+            let lastErr = null;
+            for (const modelName of GEMINI_MODELS) {
+                const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                for (let retry = 0; retry < 2; retry++) {
+                    try {
+                        const res = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                            body: JSON.stringify(payload)
+                        });
+                        const responseText = await res.text();
+                        if (res.ok) {
+                            const data = JSON.parse(responseText);
+                            const textOut = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                            if (textOut) return textOut;
+                        }
+                        if (res.status === 429) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            continue;
+                        }
+                        if (res.status === 400 || res.status === 403 || res.status === 404) {
+                            lastErr = new Error(`[Google API ${res.status}] (${modelName}): ${responseText.slice(0, 150)}`);
+                            break;
+                        }
+                        throw new Error(`[Google API ${res.status}] ${responseText.slice(0, 150)}`);
+                    } catch (err) {
+                        lastErr = err;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+            }
+            throw lastErr || new Error("Gemini 3.x 모델 호출에 실패했습니다.");
+        }
+
+        async function uploadAudioToGemini(file) {
+            const apiKey = getActiveApiKey();
+            const uploadEndpoint = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`;
+            const mimeType = file.type || 'audio/webm';
+
+            const startRes = await fetch(uploadEndpoint, {
+                method: 'POST',
+                headers: {
+                    'X-Goog-Upload-Protocol': 'resumable',
+                    'X-Goog-Upload-Command': 'start',
+                    'X-Goog-Upload-Header-Content-Length': String(file.size),
+                    'X-Goog-Upload-Header-Content-Type': mimeType,
+                    'x-goog-api-key': apiKey,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ file: { display_name: file.name } })
+            });
+
+            if (!startRes.ok) throw new Error("업로드 초기화 실패");
+            const uploadUrl = startRes.headers.get('X-Goog-Upload-URL');
+
+            const uploadRes = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: { 'Content-Length': String(file.size), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize', 'x-goog-api-key': apiKey },
+                body: file
+            });
+
+            if (!uploadRes.ok) throw new Error("음성 전송 실패");
+            const result = JSON.parse(await uploadRes.text());
+            return result.file;
+        }
+
+        async function deleteGeminiFile(fileName) {
+            const apiKey = getActiveApiKey();
+            if (!apiKey || !fileName) return;
+            try {
+                await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, { method: 'DELETE', headers: { 'x-goog-api-key': apiKey } });
+            } catch (e) {}
+        }
+
+        async function waitForGeminiFileActive(fileName) {
+            const apiKey = getActiveApiKey();
+            let state = 'PROCESSING';
+            let fileInfo;
+            let attempts = 0;
+            while (state === 'PROCESSING' && attempts < 60) {
+                await new Promise(r => setTimeout(r, 2000));
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, { headers: { 'x-goog-api-key': apiKey } });
+                if (res.ok) {
+                    fileInfo = JSON.parse(await res.text());
+                    state = fileInfo.state;
+                }
+                attempts++;
+            }
+            if (state !== 'ACTIVE') throw new Error('음성 처리 실패');
+            return fileInfo;
+        }
+
+        async function runStep1FullDurationTranscription(fileUri, mimeType, studentName, fileIndex, totalFiles) {
+            const prompt = `[보컬 레슨 음성 ${fileIndex + 1}/${totalFiles} 전 구간 완주 전사] 수강생: "${studentName}"
+
+[절대 필수 규칙]
+1. 본 음성은 약 50~90분의 긴 녹음입니다. **반드시 00:00 시작부터 파일의 맨 마지막 종료 시각까지 전체를 누락 없이 완주하여 기록**하세요.
+2. 앞쪽 10분만 적고 멈추지 마세요. 단순 잡담이나 긴 반주 대기 시간은 건너뛰고, 강사의 코칭/스케일/호흡지적/실전곡 가창이 발생하는 모든 구간을 타임스탬프([MM:SS])와 함께 시간 순서대로 끝까지 적으세요.
+3. 구두로 명확히 언급되지 않은 곡명이나 발성 이론은 임의 날조하지 마세요.`;
+
+            const payload = {
+                systemInstruction: { parts: [{ text: "당신은 보컬 아카데미 전문 속기사입니다. 긴 오디오의 시작(00:00)부터 끝까지 전체 타임라인을 완주하여 시간대별 핵심 코칭 사실을 전사합니다." }] },
+                contents: [{ parts: [{ fileData: { fileUri, mimeType } }, { text: prompt }] }],
+                generationConfig: { maxOutputTokens: 8192, temperature: 0.1 }
+            };
+            return await executeGeminiRequest(payload);
+        }
+
+        async function runStep2ChapterSummarization(fullTranscript, studentName) {
+            const prompt = `수강생 "${studentName}"의 레슨 전체 전사록입니다. 전사록의 시작(00:00)부터 마지막 종료 시각까지 전 구간을 균등하게 분할하여 8~12개의 챕터 JSON 배열로 요약하세요.
+
+[동적 양측 균형 및 길이 맞춤 원칙]
+1. 챕터 분할:
+   - 레슨 전체 시간대를 균등하게 8~12개 챕터로 추출하세요.
+   - 만약 총 챕터 수가 홀수(예: 9개, 11개)로 도출되는 경우:
+     * 좌측 컬럼에 배치될 전반부 챕터들은 2.5줄 내외로 간결하게 작성하세요.
+     * 우측 컬럼에 배치될 후반부 챕터들은 항목 수가 적은 만큼, **[강사 큐 + 학생 소리 반응 + 자가 연습 팁]을 3.5~4줄로 도톰하고 풍성하게 작성**하여 좌측 전체 세로 높이와 완벽하게 대칭을 맞추세요.
+2. 각 챕터 필수 항목:
+   - focusTag: 핵심 훈련 목표 (예: '발성 기초', '호흡 지지', '성대 접지', '브릿지 연결', '모음 교정', '실전 가창', '톤 컨트롤')
+   - title: 명확한 챕터 제목
+   - time: 해당 구간의 실제 타임스탬프 (예: '03:40-08:20', '48:30-58:10')
+   - desc: 사실 기반 3요소 서술. 중요 발성 용어는 **단어** 형태로 볼드 처리.
+
+[전체 전사록]
+${fullTranscript}`;
+
+            const payload = {
+                systemInstruction: { parts: [{ text: "당신은 보컬 레슨 큐레이션 전문가입니다. 홀수 챕터 분할 시에도 텍스트 분량을 동적으로 조절하여 좌우 세로 길이가 정확히 맞아떨어지도록 정돈된 JSON을 작성합니다." }] },
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json", responseSchema: STEP2_CHAPTER_SCHEMA, temperature: 0.15 }
+            };
+            const jsonStr = await executeGeminiRequest(payload);
+            return cleanAndParseJSON(jsonStr);
+        }
+
+        async function runStep3StructureReport(chapters, fullTranscript, studentName) {
+            const chaptersJson = JSON.stringify(chapters, null, 2);
+            const prompt = `수강생 "${studentName}"의 챕터 요약본과 전사록을 종합하여, A4 1페이지 프리미엄 레슨 노트 완성본 JSON을 STEP3_REPORT_SCHEMA 규격으로 생성하세요.
+
+[완성 지침]
+1. subtitle: 레슨 성격을 관통하는 서브타이틀 (예: '발성 기초 훈련 & 실전 가창 밸런스')
+2. chapters: 주어진 챕터 배열을 그대로 포함.
+3. todaysPoint: 오늘 레슨 전체를 관통하는 핵심 총평 1~2줄.
+4. selfCheck: 다음 레슨 전 집에서 실천할 과제 3개 항목.
+
+[챕터 요약본]
+${chaptersJson}`;
+
+            const payload = {
+                systemInstruction: { parts: [{ text: "당신은 보컬 아카데미 수석 분석관입니다. 요약본을 A4 1페이지 완성형 레슨 노트 규격으로 완성합니다." }] },
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json", responseSchema: STEP3_REPORT_SCHEMA, temperature: 0.15 }
+            };
+            const jsonStr = await executeGeminiRequest(payload);
+            return cleanAndParseJSON(jsonStr);
+        }
+
+        async function process3StepPipeline(studentName) {
+            const displayArea = document.getElementById('integrated-summary-display');
+            const btn = document.getElementById('audio-analyze-btn');
+            if (btn) btn.disabled = true;
+
+            function renderProgress(stepMsg, current, total) {
+                displayArea.innerHTML = `
+                    <div class="step-progress-box">
+                        <div style="font-weight:800; font-size:0.85rem; color:var(--primary); margin-bottom:4px;">🚀 3단계 AI 레슨 분석 및 A4 리포트 생성 중...</div>
+                        <div class="step-row active"><div class="step-spinner"></div><span>[${current}/${total}] ${escapeHtml(stepMsg)}</span></div>
+                    </div>
+                `;
+            }
+
+            try {
+                let mergedTranscript = "";
+                const totalFiles = selectedAudioFiles.length;
+
+                for (let i = 0; i < totalFiles; i++) {
+                    const file = selectedAudioFiles[i];
+                    renderProgress(`파일 (${i+1}/${totalFiles}) 업로드 중...`, (i*2)+1, (totalFiles*2)+2);
+                    const uploaded = await uploadAudioToGemini(file);
+                    try {
+                        const active = await waitForGeminiFileActive(uploaded.name);
+                        renderProgress(`[Step 1] 전 구간(00:00~종료시각) 타임라인 완주 전사 중...`, (i*2)+2, (totalFiles*2)+2);
+                        const text = await runStep1FullDurationTranscription(active.uri, active.mimeType, studentName, i, totalFiles);
+                        mergedTranscript += `\n\n--- [파일 ${i+1}: ${file.name}] ---\n${text}`;
+                    } finally {
+                        if (uploaded && uploaded.name) await deleteGeminiFile(uploaded.name);
+                    }
+                }
+
+                lastGeneratedTranscript = mergedTranscript;
+
+                renderProgress(`[Step 2] 동적 좌우 균형 챕터별 핵심 요약 중...`, (totalFiles*2)+1, (totalFiles*2)+2);
+                const chapters = await runStep2ChapterSummarization(mergedTranscript, studentName);
+
+                renderProgress(`[Step 3] A4 1장 정돈 렌더링 중...`, (totalFiles*2)+2, (totalFiles*2)+2);
+                const finalReport = await runStep3StructureReport(chapters, mergedTranscript, studentName);
+                
+                lastGeneratedChapterData = finalReport;
+                saveReportToStudentHistory(studentName, finalReport);
+                renderSummaryResult();
+                showToast('A4 레슨 리포트 생성이 완료되었습니다!');
+            } catch (err) {
+                displayArea.innerHTML = `<div class="chapter-box" style="color:var(--danger); font-weight:700;">❌ 분석 실패: ${escapeHtml(err.message)}</div>`;
+                showToast('분석 실패: ' + err.message, 'error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function processPastedText3Step(studentName) {
+            const rawText = document.getElementById('daglo-paste-input').value.trim();
+            if (!rawText) { showToast('텍스트를 입력해주세요.', 'error'); return; }
+
+            const displayArea = document.getElementById('integrated-summary-display');
+            displayArea.innerHTML = `<div class="chapter-box"><div style="font-weight:700; color:var(--primary);">✨ [Step 2] 텍스트 기반 동적 밸런스 요약 중...</div></div>`;
+
+            try {
+                lastGeneratedTranscript = rawText;
+                const chapters = await runStep2ChapterSummarization(rawText, studentName);
+                
+                displayArea.innerHTML = `<div class="chapter-box"><div style="font-weight:700; color:var(--primary);">✨ [Step 3] A4 리포트 정돈 구조화 중...</div></div>`;
+                const finalReport = await runStep3StructureReport(chapters, rawText, studentName);
+                
+                lastGeneratedChapterData = finalReport;
+                saveReportToStudentHistory(studentName, finalReport);
+                renderSummaryResult();
+                showToast('A4 피드백 리포트가 완성되었습니다!');
+            } catch (err) {
+                displayArea.innerHTML = `<div class="chapter-box" style="color:var(--danger); font-weight:700;">❌ 분석 실패: ${escapeHtml(err.message)}</div>`;
+                showToast('분석 실패: ' + err.message, 'error');
+            }
+        }
+
+        function renderSummaryResult() {
+            const transcriptAccordion = lastGeneratedTranscript ? `
+                <div class="transcript-viewer-container">
+                    <div class="transcript-header" onclick="toggleTranscriptViewer()">
+                        <span>📜 Step 1 전사본(00:00~종료시각 전체 스크립트) 확인</span>
+                        <span id="transcript-toggle-icon">▼</span>
+                    </div>
+                    <div class="transcript-body" id="transcript-body-el" style="display:none;">${escapeHtml(lastGeneratedTranscript)}</div>
+                </div>
+            ` : '';
+
+            document.getElementById('integrated-summary-display').innerHTML = `
+                <div class="chapter-box">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                        <strong style="color:#1E1B4B;">✨ 오늘의 A4 레슨 리포트 완성!</strong>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn btn-share btn-sm" onclick="shareReportToMobile()">💬 학생에게 카카오톡/공유</button>
+                            <button class="btn btn-pdf btn-sm" onclick="exportSampleStylePDF()">📄 A4 리포트 인쇄/PDF 저장</button>
+                        </div>
+                    </div>
+                    ${transcriptAccordion}
+                </div>
+            `;
+        }
+
+        function toggleTranscriptViewer() {
+            const el = document.getElementById('transcript-body-el');
+            const icon = document.getElementById('transcript-toggle-icon');
+            if (el.style.display === 'none') {
+                el.style.display = 'block';
+                icon.textContent = '▲';
+            } else {
+                el.style.display = 'none';
+                icon.textContent = '▼';
+            }
+        }
+
+        async function shareReportToMobile() {
+            const studentName = currentTargetStudentName || '수강생';
+            const data = lastGeneratedChapterData;
+            if (!data) { showToast("생성된 리포트가 없습니다.", "error"); return; }
+
+            const shareText = `[ROEN VOCAL CARE] ${studentName} 학생 오늘의 레슨 노트 요약\n\n📌 Today's Point:\n${data.todaysPoint || ''}\n\n✅ 다음 레슨 전 과제:\n${(data.selfCheck || []).map((c, i) => `${i+1}. ${c}`).join('\n')}`;
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: `[레슨 리포트] ${studentName} 학생`,
+                        text: shareText
+                    });
+                    showToast("성공적으로 공유되었습니다.");
+                } catch (e) {
+                    if (e.name !== 'AbortError') copyToClipboard(shareText);
+                }
+            } else {
+                copyToClipboard(shareText);
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("리포트 요약 텍스트가 복사되었습니다! 카카오톡에 붙여넣으세요.");
+            }).catch(() => {
+                showToast("클립보드 복사 실패", "error");
+            });
+        }
+
+        function saveReportToStudentHistory(studentName, reportData) {
+            const student = studentList.find(s => s.name === studentName);
+            if (student) {
+                if (!student.reportHistory) student.reportHistory = [];
+                student.reportHistory.unshift({
+                    id: "rep_" + Date.now(),
+                    date: formatDate(new Date()),
+                    data: reportData
+                });
+                if (student.reportHistory.length > 50) student.reportHistory.length = 50;
+                saveTeacherData();
+            }
+        }
+
+        function openReportHistoryModal(idx) {
+            const student = studentList[idx];
+            const history = student.reportHistory || [];
+
+            let listHtml = history.length === 0 
+                ? `<div style="text-align:center; padding:2rem; color:var(--text-muted); font-size:0.85rem;">아직 생성된 리포트가 없습니다.</div>`
+                : history.map((h, hIdx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 0.9rem; border:1px solid var(--border); border-radius:var(--radius-md); margin-bottom:0.6rem; background:var(--surface); gap:8px;">
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-weight:700; font-size:0.85rem; color:#111827;">${escapeHtml(h.date)} 레슨 노트</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml((h.data.todaysPoint || '').slice(0, 45))}...</div>
+                        </div>
+                        <div style="display:flex; gap:4px; flex-shrink:0;">
+                            <button class="btn btn-pdf btn-sm" onclick="viewHistoryReport(${idx}, ${hIdx})">📄 보기</button>
+                            <button class="btn btn-secondary btn-sm" onclick="openEditHistoryModal(${idx}, ${hIdx})">✏️ 수정</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteHistoryReport(${idx}, ${hIdx})">🗑️</button>
+                        </div>
+                    </div>
+                `).join('');
+
+            showModal(`[${student.name}] 레슨 히스토리 (${history.length}건)`, `<div>${listHtml}</div>`, `<button class="btn btn-secondary" onclick="closeModal()">닫기</button>`);
+        }
+
+        function viewHistoryReport(studentIdx, historyIdx) {
+            const student = studentList[studentIdx];
+            const entry = student.reportHistory[historyIdx];
+            if (!entry) return;
+            currentTargetStudentName = student.name;
+            lastGeneratedChapterData = entry.data;
+            exportSampleStylePDF();
+        }
+
+        function openEditHistoryModal(studentIdx, historyIdx) {
+            const student = studentList[studentIdx];
+            const entry = student.reportHistory[historyIdx];
+            if (!entry) return;
+
+            const bodyHtml = `
+                <form id="edit-history-form" onsubmit="saveEditedHistory(event, ${studentIdx}, ${historyIdx})">
+                    <div class="form-group">
+                        <label>레슨 일자</label>
+                        <input type="text" id="hist-date-input" class="form-control" value="${escapeHtml(entry.date)}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>레슨 서브타이틀</label>
+                        <input type="text" id="hist-subtitle-input" class="form-control" value="${escapeHtml(entry.data.subtitle || '')}">
+                    </div>
+                    <div class="form-group">
+                        <label>TODAY'S POINT (핵심 총평)</label>
+                        <textarea id="hist-point-input" class="form-control" style="height:70px; resize:vertical;">${escapeHtml(entry.data.todaysPoint || '')}</textarea>
+                    </div>
+                </form>
+            `;
+            showModal(`레슨 노트 수정 (${student.name} - ${entry.date})`, bodyHtml, `
+                <button class="btn btn-secondary" onclick="openReportHistoryModal(${studentIdx})">취소</button>
+                <button class="btn btn-primary" onclick="document.getElementById('edit-history-form').requestSubmit()">수정 저장</button>
+            `);
+        }
+
+        function saveEditedHistory(e, studentIdx, historyIdx) {
+            e.preventDefault();
+            const student = studentList[studentIdx];
+            const entry = student.reportHistory[historyIdx];
+            if (!entry) return;
+
+            entry.date = document.getElementById('hist-date-input').value.trim();
+            entry.data.subtitle = document.getElementById('hist-subtitle-input').value.trim();
+            entry.data.todaysPoint = document.getElementById('hist-point-input').value.trim();
+
+            saveTeacherData();
+            openReportHistoryModal(studentIdx);
+            showToast("레슨 노트 내용이 수정되었습니다.");
+        }
+
+        function deleteHistoryReport(studentIdx, historyIdx) {
+            if (confirm("해당 레슨 기록을 삭제하시겠습니까?")) {
+                const student = studentList[studentIdx];
+                student.reportHistory.splice(historyIdx, 1);
+                saveTeacherData();
+                openReportHistoryModal(studentIdx);
+                showToast("레슨 기록이 삭제되었습니다.");
+            }
+        }
+
+        function exportSampleStylePDF() {
+            const studentName = currentTargetStudentName || '수강생';
+            const data = lastGeneratedChapterData;
+            if (!data) return;
+
+            const printWindow = window.open('', '_blank', 'width=900,height=1200');
+            if (!printWindow) { showToast("팝업 차단이 설정되어 있습니다.", "error"); return; }
+
+            const subtitle = data.subtitle || data.lesson_type || '녹음 파일을 바탕으로 정리한 오늘 레슨의 핵심 흐름입니다';
+            const todaysPointText = data.todaysPoint || '';
+            const selfCheckList = data.selfCheck || [];
+
+            let allChapters = [];
+            if (Array.isArray(data.chapters) && data.chapters.length > 0) {
+                allChapters = data.chapters;
+            } else if (Array.isArray(data.sections) && data.sections.length > 0) {
+                data.sections.forEach(sec => {
+                    if (Array.isArray(sec.items)) {
+                        sec.items.forEach(it => {
+                            allChapters.push({
+                                focusTag: sec.title || '핵심 트레이닝',
+                                ...it
+                            });
+                        });
+                    }
+                });
+            }
+
+            function formatDescWithBold(text) {
+                if (!text) return '';
+                let escaped = escapeHtml(text);
+                return escaped.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#1E4633; font-weight:800;">$1</strong>');
+            }
+
+            function renderChapterCard(item) {
+                const tag = item.focusTag ? `<span class="ref-focus-tag">${escapeHtml(item.focusTag)}</span>` : '';
+                return `
+                    <div class="ref-item">
+                        <div class="ref-item-header">
+                            <div class="ref-title-group">
+                                ${tag}
+                                <span class="ref-item-title">${escapeHtml(item.title)}</span>
+                            </div>
+                            ${item.time ? `<span class="ref-item-time">${escapeHtml(item.time)}</span>` : ''}
+                        </div>
+                        <div class="ref-item-desc">${formatDescWithBold(item.desc)}</div>
+                    </div>
+                `;
+            }
+
+            const mid = Math.ceil(allChapters.length / 2);
+            const leftChapters = allChapters.slice(0, mid);
+            const rightChapters = allChapters.slice(mid);
+
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html lang="ko">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>VOCAL LESSON RECAP - 오늘의 레슨 노트 (${escapeHtml(studentName)})</title>
+                    <style>
+                        @page { size: A4 portrait; margin: 0 !important; }
+                        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+                        html, body { width: 210mm; height: 297mm; max-height: 297mm; background-color: #F6F5EE !important; color: #181722; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; }
+                        body { padding: 13mm 16mm 11mm 16mm; display: flex; flex-direction: column; justify-content: space-between; height: 100vh; }
+                        
+                        /* 상단 헤더 다크 네이비 배너 */
+                        .header-banner { background-color: #1B1A24 !important; color: #FFFFFF !important; border-radius: 6px; padding: 11px 15px; display: flex; justify-content: space-between; align-items: center; border-left: 4.5px solid #D4AF37 !important; flex-shrink: 0; }
+                        .sub-label { font-size: 8px; font-weight: 900; color: #D4AF37 !important; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px; }
+                        .main-title { font-size: 21px; font-weight: 900; color: #FFFFFF !important; letter-spacing: -0.5px; line-height: 1.1; }
+                        .title-desc { font-size: 9.3px; color: #94A3B8 !important; font-weight: 500; margin-top: 3px; }
+                        .date-box { text-align: right; }
+                        .date-text { font-size: 15px; font-weight: 900; color: #FFFFFF !important; letter-spacing: -0.2px; }
+                        .date-sub { font-size: 9.5px; color: #F1F5F9 !important; margin-top: 2px; font-weight: 700; }
+                        
+                        /* 슬림 물결선 */
+                        .wave-container { margin: 6px 0 8px 0; width: 100%; height: 8px; flex-shrink: 0; }
+                        .wave-container svg { width: 100%; height: 100%; }
+
+                        /* 본문 2열 그리드 */
+                        .content-body-wrap { flex: 1; display: flex; min-height: 0; overflow: hidden; margin-bottom: 8px; }
+                        .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; height: 100%; }
+                        .column { display: flex; flex-direction: column; justify-content: space-between; height: 100%; min-height: 0; width: 100%; gap: 6px; }
+                        .column-left { padding-right: 16px; border-right: 1.2px dashed #D6CEA7; }
+
+                        /* 3줄 줄바꿈 최적화 및 구분선 */
+                        .ref-item { display: flex; flex-direction: column; justify-content: center; gap: 2.5px; background: transparent !important; border: none !important; border-bottom: 1px solid rgba(214, 206, 167, 0.5) !important; border-radius: 0 !important; padding: 4px 0 6px 0 !important; flex: 1; min-height: 0; box-shadow: none !important; }
+                        .ref-item:last-child { border-bottom: none !important; }
+                        .ref-item-header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 2px; }
+                        .ref-title-group { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; }
+                        .ref-focus-tag { background-color: #1E4633 !important; color: #FFFFFF !important; font-size: 7.6px; font-weight: 800; padding: 1.5px 4.5px; border-radius: 2px; letter-spacing: 0.2px; white-space: nowrap; flex-shrink: 0; }
+                        .ref-item-title { font-size: 10.6px; font-weight: 900; color: #111827; letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                        .ref-item-time { background-color: #F4E8D4 !important; color: #9E743A !important; font-size: 7.8px; font-weight: 800; padding: 1px 5px; border-radius: 2.5px; font-family: monospace; white-space: nowrap; flex-shrink: 0; }
+                        .ref-item-desc { font-size: 9.1px; color: #4B5563; line-height: 1.55; word-break: keep-all; text-align: justify; }
+
+                        /* 하단 투톤 박스 */
+                        .bottom-wrap { flex-shrink: 0; }
+                        .bottom-section { display: grid; grid-template-columns: 1.25fr 0.75fr; gap: 14px; align-items: stretch; }
+                        .point-box { background-color: #1B1A24 !important; color: #FFFFFF !important; padding: 10px 14px; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; min-height: 62px; border-left: 4px solid #D4AF37 !important; }
+                        .point-title { font-size: 8px; font-weight: 900; color: #D4AF37 !important; letter-spacing: 1.5px; margin-bottom: 2px; }
+                        .point-text { font-size: 9.4px; font-weight: 500; line-height: 1.45; color: #F3F4F6 !important; word-break: keep-all; }
+                        .check-box { background-color: transparent !important; padding: 5px 8px; display: flex; flex-direction: column; justify-content: center; min-height: 62px; }
+                        .check-title { font-size: 9px; font-weight: 800; color: #181722; margin-bottom: 4px; }
+                        .check-list { list-style: none; font-size: 8.5px; color: #374151; display: flex; flex-direction: column; gap: 2.5px; }
+                        .check-item { display: flex; align-items: center; gap: 4px; font-weight: 600; }
+                        .check-square { width: 8px; height: 8px; border: 1.2px solid #555555; border-radius: 2px; display: inline-block; background-color: #FFFFFF !important; flex-shrink: 0; }
+                        
+                        /* 푸터 */
+                        .footer { border-top: 1.2px solid #1E4633; padding-top: 4px; margin-top: 5px; display: flex; justify-content: space-between; font-size: 7.8px; color: #64748B; font-weight: 700; letter-spacing: 0.5px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header-wrap">
+                        <div class="header-banner">
+                            <div>
+                                <div class="sub-label">VOCAL LESSON RECAP</div>
+                                <div class="main-title">오늘의 레슨 노트</div>
+                                <div class="title-desc">${escapeHtml(subtitle)}</div>
+                            </div>
+                            <div class="date-box">
+                                <div class="date-text">${formatDate(new Date())}</div>
+                                <div class="date-sub">${escapeHtml(studentName)} 수강생</div>
+                            </div>
+                        </div>
+                        <div class="wave-container">
+                            <svg viewBox="0 0 500 20" preserveAspectRatio="none">
+                                <path d="M 0 10 Q 25 0, 50 10 T 100 10 T 150 10 T 200 10 T 250 10 T 300 10 T 350 10 T 400 10 T 450 10 T 500 10" fill="none" stroke="#1E4633" stroke-width="1.2" opacity="0.6"/>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <div class="content-body-wrap">
+                        <div class="main-grid">
+                            <div class="column column-left">
+                                ${leftChapters.map(c => renderChapterCard(c)).join('')}
+                            </div>
+                            <div class="column">
+                                ${rightChapters.map(c => renderChapterCard(c)).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bottom-wrap">
+                        <div class="bottom-section">
+                            <div class="point-box">
+                                <div class="point-title">TODAY'S POINT</div>
+                                <div class="point-text">${escapeHtml(todaysPointText)}</div>
+                            </div>
+                            <div class="check-box">
+                                <div class="check-title">다음 레슨 전 셀프 체크</div>
+                                <div class="check-list">${selfCheckList.map(item => `<div class="check-item"><span class="check-square"></span> ${escapeHtml(item)}</div>`).join('')}</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span>VOCAL COACHING NOTE</span>
+                            <span>오늘 레슨 녹음 기반 요약 · A4 1p</span>
+                        </div>
+                    </div>
+                    <script>
+                        window.onload = function() {
+                            setTimeout(() => { window.print(); }, 200);
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `;
+            printWindow.document.open();
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+        }
+
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let recordingStream = null;
+        let recordingStartTime = null;
+        let recordingTimerInterval = null;
+
+        async function startLiveRecording(studentName) {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showToast('마이크 녹음을 지원하지 않는 브라우저입니다.', 'error');
+                return;
+            }
+            try {
+                recordingStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 } });
+            } catch (e) {
+                showToast('마이크 권한이 필요합니다.', 'error');
+                return;
+            }
+
+            recordedChunks = [];
+            let options = { mimeType: 'audio/webm;codecs=opus' };
+            if (!MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm' };
+            mediaRecorder = new MediaRecorder(recordingStream, options);
+            mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+            mediaRecorder.start(1000);
+            recordingStartTime = Date.now();
+            updateLiveRecordUI(true);
+            recordingTimerInterval = setInterval(updateRecordingTimerDisplay, 500);
+        }
+
+        function stopLiveRecording(studentName) {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+            mediaRecorder.onstop = async () => {
+                clearInterval(recordingTimerInterval);
+                if (recordingStream) recordingStream.getTracks().forEach(t => t.stop());
+                updateLiveRecordUI(false);
+                const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                if (blob.size < 2000) { showToast('녹음이 너무 짧습니다.', 'error'); return; }
+                const audioFile = new File([blob], `${studentName}_live.webm`, { type: blob.type });
+                selectedAudioFiles = [audioFile];
+                await process3StepPipeline(studentName);
+            };
+            mediaRecorder.stop();
+        }
+
+        function updateRecordingTimerDisplay() {
+            const el = document.getElementById('live-record-timer');
+            if (!el || !recordingStartTime) return;
+            const sec = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+            const ss = String(sec % 60).padStart(2, '0');
+            el.textContent = `${mm}:${ss}`;
+        }
+
+        function updateLiveRecordUI(isRecording) {
+            const startBtn = document.getElementById('live-record-start-btn');
+            const stopBtn = document.getElementById('live-record-stop-btn');
+            const badge = document.getElementById('live-record-badge');
+            if (startBtn) startBtn.style.display = isRecording ? 'none' : 'inline-flex';
+            if (stopBtn) stopBtn.style.display = isRecording ? 'inline-flex' : 'none';
+            if (badge) badge.style.display = isRecording ? 'inline-flex' : 'none';
+        }
+
+        function showModal(title, body, footer) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-body').innerHTML = body;
+            document.getElementById('modal-footer').innerHTML = footer;
+            document.getElementById('modal-overlay').classList.add('active');
+        }
+        function closeModal() { document.getElementById('modal-overlay').classList.remove('active'); }
+        function handleOverlayClick(e) { if (e.target.id === 'modal-overlay') closeModal(); }
+        function showToast(msg, type='info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type === 'error' ? 'error' : ''}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
+        }
+        function escapeHtml(str) { return str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : ''; }
+        function formatDate(d) { return `${d.getFullYear()}. ${String(d.getMonth()+1).padStart(2,'0')}. ${String(d.getDate()).padStart(2,'0')}`; }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initFirestoreSync();
+        });
+    </script>
+</body>
+</html>
